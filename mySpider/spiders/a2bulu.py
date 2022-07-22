@@ -2,6 +2,7 @@ import scrapy
 import re
 import json
 import logging
+import time
 from mySpider.items import MyspiderItem
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,10 @@ class A2buluSpider(scrapy.Spider):
 
     pageNumber = 1 # 搜索开始页数
     endPage = -1 # 限制爬取页数，-1 为无限
+
+    # 避免触发反爬机制
+    sleepPage = 1 # 爬取 n 页后休眠一次
+    sleepTime = 3 # 爬取 n 页后的休眠时间
 
     def start_requests(self):
         login_info = dict(
@@ -59,17 +64,26 @@ class A2buluSpider(scrapy.Spider):
                     dont_filter = True
                 )
         # 翻页
-        next_page = response.xpath("//div[@class='pages']//a/text()")[-1]
-        if next_page.extract() == "下一页":
-            self.pageNumber += 1
+        try:
+            next_page = response.xpath("//div[@class='pages']//a/text()")[-1]
+            print("已爬取页数：", self.pageNumber)
+            if self.pageNumber % self.sleepPage == 0:
+                print("休眠中…)
+                time.sleep(self.sleepTime)
+            if next_page.extract() == "下一页":
+                self.pageNumber += 1
 
-            # 限制页数
-            if self.endPage != -1 and self.pageNumber > self.endPage: return
+                # 限制页数
+                if self.endPage != -1 and self.pageNumber > self.endPage: return
 
-            # 搜索表单
-            yield from self.search_function(response)
-        else:
-            return
+                # 搜索表单
+                yield from self.search_function(response)
+            else:
+                return
+        except IndexError as e:
+            print("大概已经爬完了吧，如果数量太少可以适当加休眠时间。")
+        except Exception as e:
+            print("!!! 捕获异常: ", e)
 
     def check_login(self, response):
         result = json.loads(response.text)["message"]
